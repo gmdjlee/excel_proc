@@ -162,6 +162,10 @@ Private Function ParseCSV(path As String, ByRef data() As Variant, ByRef n As Lo
     Dim i As Long, t As String
     For i = LBound(lines) To UBound(lines)
         t = Trim(lines(i))
+        ' Tolerate trailing empty columns: a line-ending comma, or one with only spaces after it
+        Do While Len(t) > 0 And (Right(t, 1) = "," Or Right(t, 1) = " " Or Right(t, 1) = vbTab)
+            t = Left(t, Len(t) - 1)
+        Loop
         If t <> "" Then rows.Add t
     Next i
 
