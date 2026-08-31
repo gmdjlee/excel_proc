@@ -24,7 +24,7 @@ function loadApp() {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const sandbox = {
     console, setTimeout, clearTimeout, Buffer, process,
-    TextEncoder, TextDecoder, URL,
+    TextEncoder, TextDecoder, URL, Uint8Array, ArrayBuffer,
   };
   sandbox.window = sandbox;
   sandbox.self = sandbox;
@@ -186,6 +186,58 @@ async function main() {
   // 테마 교체가 먹었는지 — 안 먹으면 accent2 가 C0504D (Office 2007) 로 남는다
   const themeXml = back._themes && back._themes.theme1;
   check('테마가 Office 2013+ (accent2=ED7D31)', /ED7D31/.test(themeXml || ''), 'theme len=' + (themeXml || '').length);
+
+  section('Task 7: reference.xlsx 와 셀 단위 대조');
+  const refWb = new app.ExcelJS.Workbook();
+  await refWb.xlsx.load(fs.readFileSync(path.join(ROOT, 'test', 'reference.xlsx')));
+  const rws = refWb.worksheets[0];
+
+  // tint 는 VBA 와 ExcelJS 가 쓰는 소수 자릿수가 달라 반올림해 비교한다
+  const facet = {
+    value: c => (c.value === null || c.value === undefined) ? null
+      : (c.value && c.value.richText ? c.value.richText.map(t => t.text).join('') : c.value),
+    fill: c => (c.fill && c.fill.fgColor)
+      ? 'theme=' + c.fill.fgColor.theme + ' tint=' + Math.round((c.fill.fgColor.tint || 0) * 1e6) / 1e6
+      : 'none',
+    border: c => ['top','left','bottom','right'].map(k => (c.border && c.border[k]) ? c.border[k].style : '-').join(','),
+    font: c => c.font ? (c.font.name + '/' + c.font.size) : '-',
+    align: c => c.alignment ? (c.alignment.horizontal + '/' + c.alignment.vertical) : '-',
+  };
+
+  const names = Object.keys(facet);
+  const diffs = [];
+  for (let r = 1; r <= 74; r++) {
+    for (let c = 1; c <= 18; c++) {
+      for (let f = 0; f < names.length; f++) {
+        const k = names[f];
+        const a = facet[k](bws.getCell(r, c));
+        const b = facet[k](rws.getCell(r, c));
+        if (String(a) !== String(b)) {
+          diffs.push('R' + r + 'C' + c + ' ' + k + ': SPA=' + a + ' REF=' + b);
+        }
+      }
+    }
+  }
+  check('셀 서식·값 차이 0건', diffs.length === 0, diffs.slice(0, 12).join(' | ') + (diffs.length > 12 ? ' … 총 ' + diffs.length + '건' : ''));
+
+  const sortRefs = a => a.slice().sort();
+  check('병합 목록 일치',
+    JSON.stringify(sortRefs(bws.model.merges)) === JSON.stringify(sortRefs(rws.model.merges)),
+    'SPA=' + JSON.stringify(sortRefs(bws.model.merges)) + ' REF=' + JSON.stringify(sortRefs(rws.model.merges)));
+
+  const wdiff = [];
+  for (let c = 1; c <= 18; c++) {
+    const a = bws.getColumn(c).width, b = rws.getColumn(c).width;
+    if (String(a) !== String(b)) wdiff.push('col' + c + ': SPA=' + a + ' REF=' + b);
+  }
+  check('열 너비 일치', wdiff.length === 0, wdiff.join(' | '));
+
+  const hdiff = [];
+  for (let r = 1; r <= 74; r++) {
+    const a = bws.getRow(r).height, b = rws.getRow(r).height;
+    if (String(a) !== String(b)) hdiff.push('row' + r + ': SPA=' + a + ' REF=' + b);
+  }
+  check('행 높이 일치', hdiff.length === 0, hdiff.slice(0, 8).join(' | '));
 
   console.log(failures === 0 ? '\n전체 통과' : '\n실패 ' + failures + '건');
   process.exit(failures ? 1 : 0);

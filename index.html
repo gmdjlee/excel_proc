@@ -188,23 +188,44 @@ function toXlsx(model) {
 
   const ws = wb.addWorksheet('Sheet1');
 
-  // 스타일을 먼저, 병합을 나중에. ExcelJS 가 마스터 스타일을 슬레이브에 전파한다.
+  const setStyle = (cell, s) => {
+    cell.font = { name: FONT_NAME, size: FONT_SIZE };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    const st = STYLES[s];
+    if (st.theme !== null) {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { theme: st.theme, tint: st.tint } };
+    }
+  };
+
   for (let i = 0; i < model.cells.length; i++) {
     const item = model.cells[i];
     const cell = ws.getCell(item.r, item.c);
     if (item.v !== null) cell.value = item.v;
-    cell.font = { name: FONT_NAME, size: FONT_SIZE };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    setStyle(cell, item.s);
     cell.border = BORDER_ALL;
-    const st = STYLES[item.s];
-    if (st.theme !== null) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { theme: st.theme, tint: st.tint } };
-    }
   }
 
+  // ExcelJS 의 mergeCells() 는 병합 범위 안 모든 셀의 style 객체를 마스터와 같은
+  // 참조로 통일해버려 셀별로 다른 테두리를 줄 수 없다. mergeCellsWithoutStyle 로
+  // 그 별칭 동작을 피하고, 범위 안 모든 셀에 값을 직접 채운다.
   for (let i = 0; i < model.merges.length; i++) {
     const m = model.merges[i];
-    ws.mergeCells(m.r1, m.c1, m.r2, m.c2);
+    const master = model.cells.find(x => x.r === m.r1 && x.c === m.c1);
+    for (let r = m.r1; r <= m.r2; r++) {
+      for (let c = m.c1; c <= m.c2; c++) {
+        const cell = ws.getCell(r, c);
+        setStyle(cell, master.s);
+        // 병합된 사각형의 바깥쪽 변만 테두리를 그린다. 내부 경계는 셀 사이에
+        // 숨어 보이지 않으므로 VBA 산출물처럼 비워 둔다.
+        cell.border = {
+          top: r === m.r1 ? THIN : undefined,
+          left: c === m.c1 ? THIN : undefined,
+          bottom: r === m.r2 ? THIN : undefined,
+          right: c === m.c2 ? THIN : undefined,
+        };
+      }
+    }
+    ws.mergeCellsWithoutStyle(m.r1, m.c1, m.r2, m.c2);
   }
 
   const widths = Object.keys(model.colWidths);
