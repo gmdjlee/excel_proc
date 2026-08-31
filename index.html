@@ -4,9 +4,43 @@
 <meta charset="utf-8">
 <title>CSV → 엑셀 변환기</title>
 <style>
+body { font: 14px "맑은 고딕", "Malgun Gothic", sans-serif; margin: 0; padding: 16px; }
+header { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+header input[type=text] { font: inherit; padding: 4px 6px; }
+main { display: flex; gap: 16px; align-items: flex-start; }
+#list { list-style: none; margin: 0; padding: 0; min-width: 220px; }
+#list li { padding: 6px 8px; cursor: pointer; border: 1px solid transparent; }
+#list li.sel { background: #eef3fb; border-color: #9db8dd; }
+#list li.bad { color: #b00; cursor: default; }
+#list .note { display: block; font-size: 12px; color: #666; }
+#preview { overflow: auto; max-width: calc(100vw - 300px); max-height: 78vh; }
+footer { margin-top: 12px; display: flex; gap: 8px; }
+
+table.sheet { border-collapse: collapse; table-layout: fixed; font: 11pt "맑은 고딕", "Malgun Gothic", sans-serif; }
+table.sheet td { border: 1px solid #000; text-align: center; vertical-align: middle; overflow: hidden; white-space: nowrap; padding: 0; }
+table.sheet td.empty { border: none; }
+table.sheet td.s-accent2 { background: #F8CBAD; }
+table.sheet td.s-accent5 { background: #BDD7EE; }
+table.sheet td.s-accent4 { background: #FFF2CC; }
+table.sheet td.s-gray    { background: #D9D9D9; }
+table.sheet td.s-data    { background: #FFFFFF; }
 </style>
 </head>
 <body>
+
+<header>
+  <input type="file" id="files" multiple accept=".csv">
+  <label>제목 <input type="text" id="title" value="8/28 111G"></label>
+  <label>라벨 <input type="text" id="label" value="XX"></label>
+</header>
+<main>
+  <ul id="list"></ul>
+  <div id="preview"></div>
+</main>
+<footer>
+  <button id="dl-one" disabled>선택 내려받기</button>
+  <button id="dl-all" disabled>전체 내려받기</button>
+</footer>
 
 <script>
 /*! ExcelJS 19-10-2023 */
@@ -250,6 +284,110 @@ root.APP = {
 </script>
 
 <script id="ui">
+'use strict';
+(function () {
+  const filesEl = document.getElementById('files');
+  const titleEl = document.getElementById('title');
+  const labelEl = document.getElementById('label');
+  const listEl = document.getElementById('list');
+  const previewEl = document.getElementById('preview');
+  const dlOneEl = document.getElementById('dl-one');
+  const dlAllEl = document.getElementById('dl-all');
+
+  let entries = [];      // {name, base, rows, error}
+  let selected = -1;
+
+  // 엑셀 저장 너비 → 화면 px. 폰트에 따라 달라지므로 여기 두 상수만 조정하면 된다.
+  const PX_PER_WIDTH = 7;
+  const PX_PADDING = 5;
+  const DEFAULT_WIDTH = 8.43;
+  const colPx = w => Math.round(w * PX_PER_WIDTH) + PX_PADDING;
+
+  const escapeHtml = s => String(s).replace(/[&<>"]/g,
+    ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+  function renderPreview(model) {
+    const covered = new Set();
+    const span = new Map();
+    for (const m of model.merges) {
+      span.set(m.r1 + ',' + m.c1, { rowspan: m.r2 - m.r1 + 1, colspan: m.c2 - m.c1 + 1 });
+      for (let r = m.r1; r <= m.r2; r++) {
+        for (let c = m.c1; c <= m.c2; c++) {
+          if (!(r === m.r1 && c === m.c1)) covered.add(r + ',' + c);
+        }
+      }
+    }
+    const byPos = new Map(model.cells.map(x => [x.r + ',' + x.c, x]));
+
+    let html = '<table class="sheet"><colgroup>';
+    for (let c = 1; c <= model.maxCol; c++) {
+      const w = model.colWidths[c] === undefined ? DEFAULT_WIDTH : model.colWidths[c];
+      html += '<col style="width:' + colPx(w) + 'px">';
+    }
+    html += '</colgroup><tbody>';
+
+    for (let r = 1; r <= model.maxRow; r++) {
+      html += '<tr style="height:' + (model.rowHeight / 0.75) + 'px">';   // pt → px
+      for (let c = 1; c <= model.maxCol; c++) {
+        const key = r + ',' + c;
+        if (covered.has(key)) continue;
+        const sp = span.get(key);
+        const attrs = sp ? ' rowspan="' + sp.rowspan + '" colspan="' + sp.colspan + '"' : '';
+        const cell = byPos.get(key);
+        if (!cell) { html += '<td class="empty"' + attrs + '></td>'; continue; }
+        const text = cell.v === null ? '' : escapeHtml(cell.v);
+        html += '<td class="s-' + cell.s + '"' + attrs + '>' + text + '</td>';
+      }
+      html += '</tr>';
+    }
+    return html + '</tbody></table>';
+  }
+
+  function draw() {
+    listEl.innerHTML = entries.map((e, i) => {
+      const cls = e.error ? 'bad' : (i === selected ? 'sel' : '');
+      const note = e.error ? e.error : e.rows.length + '행';
+      return '<li class="' + cls + '" data-i="' + i + '">' +
+        (e.error ? '✗ ' : '✓ ') + escapeHtml(e.name) +
+        '<span class="note">' + escapeHtml(note) + '</span></li>';
+    }).join('');
+
+    const ok = entries.filter(e => !e.error);
+    dlOneEl.disabled = selected < 0;
+    dlAllEl.disabled = ok.length === 0;
+
+    if (selected < 0) { previewEl.innerHTML = ''; return; }
+    const model = APP.buildModel(entries[selected].rows, titleEl.value, labelEl.value);
+    previewEl.innerHTML = renderPreview(model);
+  }
+
+  filesEl.addEventListener('change', async () => {
+    entries = [];
+    for (const f of filesEl.files) {
+      const res = APP.parseCSV(await f.text());
+      entries.push({
+        name: f.name,
+        base: f.name.replace(/\.[^.]*$/, ''),
+        rows: res.rows || null,
+        error: res.error || null,
+      });
+    }
+    selected = entries.findIndex(e => !e.error);
+    draw();
+  });
+
+  listEl.addEventListener('click', ev => {
+    const li = ev.target.closest('li');
+    if (!li) return;
+    const i = Number(li.dataset.i);
+    if (entries[i].error) return;
+    selected = i;
+    draw();
+  });
+
+  titleEl.addEventListener('input', draw);
+  labelEl.addEventListener('input', draw);
+})();
 </script>
 </body>
 </html>
