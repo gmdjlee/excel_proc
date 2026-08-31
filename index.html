@@ -16,14 +16,9 @@ main { display: flex; gap: 16px; align-items: flex-start; }
 #preview { overflow: auto; max-width: calc(100vw - 300px); max-height: 78vh; }
 footer { margin-top: 12px; display: flex; gap: 8px; }
 
-table.sheet { border-collapse: collapse; table-layout: fixed; font: 11pt "맑은 고딕", "Malgun Gothic", sans-serif; }
+table.sheet { border-collapse: collapse; table-layout: fixed; }
 table.sheet td { border: 1px solid #000; text-align: center; vertical-align: middle; overflow: hidden; white-space: nowrap; padding: 0; }
 table.sheet td.empty { border: none; }
-table.sheet td.s-accent2 { background: #F8CBAD; }
-table.sheet td.s-accent5 { background: #BDD7EE; }
-table.sheet td.s-accent4 { background: #FFF2CC; }
-table.sheet td.s-gray    { background: #D9D9D9; }
-table.sheet td.s-data    { background: #FFFFFF; }
 </style>
 </head>
 <body>
@@ -144,7 +139,7 @@ function buildModel(rows, titleText, labelText) {
   const put = (r, c, v, s) => cells.push({ r: r, c: c, v: v, s: s });
 
   // 1행: 제목 A1:O1, 라벨 Q1:R1. 병합에 덮인 셀은 넣지 않는다 —
-  // ExcelJS 가 마스터 스타일을 슬레이브에 그대로 전파하고, 미리보기는 colspan 으로 처리한다.
+  // toXlsx 가 병합 사각형 전체에 직접 서식을 입히고, 미리보기는 colspan/rowspan 으로 처리한다.
   put(1, COL.A, titleText, 'accent2');
   merges.push({ r1: 1, c1: COL.A, r2: 1, c2: COL.O });
   put(1, COL.Q, labelText, 'gray');
@@ -181,7 +176,9 @@ function buildModel(rows, titleText, labelText) {
     }
   }
 
-  // 사이드 표 P/Q/R — Q는 홀수 열 값 전체, R은 짝수 열 값 전체를 내림차순으로
+  // 사이드 표 P/Q/R — Q는 홀수 열 값 전체, R은 짝수 열 값 전체를 내림차순으로.
+  // 아래 k-바깥/i-안쪽 순회는 그냥 편한 순서일 뿐이다 — qs/rs 를 각자 정렬해서 쓰므로
+  // 수집 순서(중첩 방향)는 어떤 입력에도 결과에 영향을 주지 않는다.
   put(1, COL.P, null, 'gray');
   put(2, COL.P, null, 'gray');
   const qs = [], rs = [];
@@ -241,10 +238,12 @@ function toXlsx(model) {
 
   // ExcelJS 의 mergeCells() 는 병합 범위 안 모든 셀의 style 객체를 마스터와 같은
   // 참조로 통일해버려 셀별로 다른 테두리를 줄 수 없다. mergeCellsWithoutStyle 로
-  // 그 별칭 동작을 피하고, 범위 안 모든 셀에 값을 직접 채운다.
+  // 그 별칭 동작을 피하고, 범위 안 모든 셀에 서식을 직접 채운다.
+  const byPos = new Map(model.cells.map(x => [x.r + ',' + x.c, x]));
   for (let i = 0; i < model.merges.length; i++) {
     const m = model.merges[i];
-    const master = model.cells.find(x => x.r === m.r1 && x.c === m.c1);
+    const master = byPos.get(m.r1 + ',' + m.c1);
+    if (!master) throw new Error('병합 마스터 셀이 모델에 없습니다: R' + m.r1 + 'C' + m.c1);
     for (let r = m.r1; r <= m.r2; r++) {
       for (let c = m.c1; c <= m.c2; c++) {
         const cell = ws.getCell(r, c);
@@ -272,11 +271,11 @@ function toXlsx(model) {
 }
 
 root.APP = {
-  OFFICE_THEME_XML: OFFICE_THEME_XML,
   parseCSV: parseCSV,
   buildModel: buildModel,
   STYLES: STYLES,
-  COL: COL,
+  FONT_NAME: FONT_NAME,
+  FONT_SIZE: FONT_SIZE,
   toXlsx: toXlsx,
 };
 
@@ -319,7 +318,7 @@ root.APP = {
     }
     const byPos = new Map(model.cells.map(x => [x.r + ',' + x.c, x]));
 
-    let html = '<table class="sheet"><colgroup>';
+    let html = '<table class="sheet" style="font:' + APP.FONT_SIZE + 'pt \'' + APP.FONT_NAME + '\', sans-serif"><colgroup>';
     for (let c = 1; c <= model.maxCol; c++) {
       const w = model.colWidths[c] === undefined ? DEFAULT_WIDTH : model.colWidths[c];
       html += '<col style="width:' + colPx(w) + 'px">';
@@ -336,7 +335,7 @@ root.APP = {
         const cell = byPos.get(key);
         if (!cell) { html += '<td class="empty"' + attrs + '></td>'; continue; }
         const text = cell.v === null ? '' : escapeHtml(cell.v);
-        html += '<td class="s-' + cell.s + '"' + attrs + '>' + text + '</td>';
+        html += '<td style="background:' + APP.STYLES[cell.s].css + '"' + attrs + '>' + text + '</td>';
       }
       html += '</tr>';
     }
@@ -364,7 +363,9 @@ root.APP = {
   filesEl.addEventListener('change', async () => {
     entries = [];
     for (const f of filesEl.files) {
-      const res = APP.parseCSV(await f.text());
+      let text = null, readErr = null;
+      try { text = await f.text(); } catch (err) { readErr = '읽기 실패: ' + err.message; }
+      const res = readErr ? { error: readErr } : APP.parseCSV(text);
       entries.push({
         name: f.name,
         base: f.name.replace(/\.[^.]*$/, ''),
@@ -396,7 +397,7 @@ root.APP = {
     a.href = url;
     a.download = entry.base + '_result.xlsx';   // VBA 와 같은 규칙
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   dlOneEl.addEventListener('click', async () => {

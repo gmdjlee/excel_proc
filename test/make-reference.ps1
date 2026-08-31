@@ -17,3 +17,4 @@ $ok = $xl.Run('BuildFromCSV', $csv, '8/28 111G', 'XX', $out)
 "BuildFromCSV = $ok"
 $wb.Close($false)
 $xl.Quit()
+if (-not $ok) { throw "BuildFromCSV returned $ok — reference.xlsx was NOT produced" }

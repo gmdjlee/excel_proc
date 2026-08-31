@@ -103,6 +103,10 @@ async function main() {
   check('O3 = 빈 칸막이, accent2', at(3, 15) && at(3, 15).v === null && at(3, 15).s === 'accent2');
   check('O4 = 빈 칸막이, data', at(4, 15) && at(4, 15).v === null && at(4, 15).s === 'data');
 
+  check('모델의 모든 스타일 토큰이 STYLES 에 있다',
+    M.cells.every(c => app.APP.STYLES[c.s] !== undefined),
+    [...new Set(M.cells.map(c => c.s))].join(','));
+
   section('Task 4: A/B 그룹 병합');
   check('B 그룹 1: B3:B6 = 1', hasMerge(M, 3, 2, 6, 2) && at(3, 2) && at(3, 2).v === 1 && at(3, 2).s === 'accent2');
   check('B 그룹 2: B7:B10 = 2', hasMerge(M, 7, 2, 10, 2) && at(7, 2) && at(7, 2).v === 2);
