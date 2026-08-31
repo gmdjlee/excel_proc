@@ -122,6 +122,9 @@ const COL = { A: 1, B: 2, C: 3, O: 15, P: 16, Q: 17, R: 18 };
 const NCOL = 12;                 // 데이터 열 수 (C..N)
 const FONT_NAME = '맑은 고딕';
 const FONT_SIZE = 11;
+// 미리보기 CSS 전용. 맑은 고딕이 한글 이름으로 등록되지 않은 환경에서도 같은 글꼴을
+// 찾도록 영문 별칭을 남긴다. xlsx 는 FONT_NAME 만 쓴다 — 엑셀에는 폴백 개념이 없다.
+const FONT_FALLBACK = "'Malgun Gothic', sans-serif";
 
 const STYLES = {
   accent2: { css: '#F8CBAD', theme: 5,    tint:  0.5999938962981048 },
@@ -276,6 +279,7 @@ root.APP = {
   STYLES: STYLES,
   FONT_NAME: FONT_NAME,
   FONT_SIZE: FONT_SIZE,
+  FONT_FALLBACK: FONT_FALLBACK,
   toXlsx: toXlsx,
 };
 
@@ -318,7 +322,7 @@ root.APP = {
     }
     const byPos = new Map(model.cells.map(x => [x.r + ',' + x.c, x]));
 
-    let html = '<table class="sheet" style="font:' + APP.FONT_SIZE + 'pt \'' + APP.FONT_NAME + '\', sans-serif"><colgroup>';
+    let html = '<table class="sheet" style="font:' + APP.FONT_SIZE + 'pt \'' + APP.FONT_NAME + '\', ' + APP.FONT_FALLBACK + '"><colgroup>';
     for (let c = 1; c <= model.maxCol; c++) {
       const w = model.colWidths[c] === undefined ? DEFAULT_WIDTH : model.colWidths[c];
       html += '<col style="width:' + colPx(w) + 'px">';
