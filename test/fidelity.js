@@ -167,6 +167,40 @@ async function main() {
   check('maxRow = 2 + 6n = 74', M.maxRow === 74, 'maxRow=' + M.maxRow);
   check('maxCol = 18', M.maxCol === 18);
 
+  section('행 선택 필터링과 정렬 방향');
+  const sel2 = rows12.map((_, i) => i < 2);   // 앞의 2행만 선택
+  const Msel = app.APP.buildModel(rows12, '8/28 111G', 'XX', sel2, 'desc');
+  check('선택 2행 → maxRow 은 본문 높이(26) — 사이드 표(12)보다 크다', Msel.maxRow === 26, 'maxRow=' + Msel.maxRow);
+
+  const qSelExpected = [], rSelExpected = [];
+  for (let k = 0; k < 6; k++) {
+    for (let i = 0; i < 12; i++) {
+      if (!sel2[i]) continue;
+      qSelExpected.push(rows12[i][2 * k]);
+      rSelExpected.push(rows12[i][2 * k + 1]);
+    }
+  }
+  qSelExpected.sort((a, b) => b - a);
+  rSelExpected.sort((a, b) => b - a);
+
+  const qSelActual = [];
+  for (let r = 3; r < 3 + qSelExpected.length; r++) qSelActual.push(cellAt(Msel, r, 17).v);
+  check('선택 2행의 Q 값이 그 두 행만으로 계산된다', JSON.stringify(qSelActual) === JSON.stringify(qSelExpected), JSON.stringify(qSelActual));
+  check('선택 범위를 넘는 행엔 Q 셀이 없다', cellAt(Msel, 3 + qSelExpected.length, 17) === null);
+
+  const Masc = app.APP.buildModel(rows12, '8/28 111G', 'XX', sel2, 'asc');
+  const qAscExpected = qSelExpected.slice().reverse();
+  const qAscActual = [];
+  for (let r = 3; r < 3 + qAscExpected.length; r++) qAscActual.push(cellAt(Masc, r, 17).v);
+  check('오름차순 지정 시 Q 가 오름차순', JSON.stringify(qAscActual) === JSON.stringify(qAscExpected), JSON.stringify(qAscActual));
+
+  const Mnone = app.APP.buildModel(rows12, '8/28 111G', 'XX', rows12.map(() => false), 'desc');
+  check('선택 0행 → 사이드 표 없음, maxRow 은 본문 높이', cellAt(Mnone, 3, 17) === null && Mnone.maxRow === 26, 'maxRow=' + Mnone.maxRow);
+  check('선택 0행이어도 P1/P2 헤더는 남는다', cellAt(Mnone, 1, 16) !== null && cellAt(Mnone, 2, 16) !== null);
+
+  const Mexplicit = app.APP.buildModel(rows12, '8/28 111G', 'XX', rows12.map(() => true), 'desc');
+  check('selected/sortDir 인자를 생략하면 전체선택+내림차순과 동일', JSON.stringify(Mexplicit) === JSON.stringify(M), 'differs');
+
   section('Task 6: toXlsx');
   const buf = await app.APP.toXlsx(M);
   check('바이트가 나온다', buf && buf.byteLength > 5000, 'bytes=' + (buf && buf.byteLength));

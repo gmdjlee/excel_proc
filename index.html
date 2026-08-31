@@ -22,6 +22,8 @@ table.sheet td.empty { border: none; }
 table.sheet td.editable { cursor: text; }
 table.sheet td.editable:hover, table.sheet td.editable:focus { outline: 1px dashed #666; outline-offset: -1px; }
 table.sheet td.editable.bad-input { outline: 2px solid #c00; outline-offset: -2px; }
+table.sheet td.rowsel { border: none; text-align: center; padding: 0 2px; }
+table.sheet td.rowsel input { margin: 0; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -30,6 +32,10 @@ table.sheet td.editable.bad-input { outline: 2px solid #c00; outline-offset: -2p
   <input type="file" id="files" multiple accept=".csv">
   <label>제목 <input type="text" id="title" value="8/28 111G"></label>
   <label>라벨 <input type="text" id="label" value="XX"></label>
+  <label>정렬 <select id="sortDir">
+    <option value="desc" selected>내림차순</option>
+    <option value="asc">오름차순</option>
+  </select></label>
 </header>
 <main>
   <ul id="list"></ul>
@@ -138,8 +144,11 @@ const STYLES = {
 };
 
 // BuildSheet 를 이식한 유일한 지점. 미리보기와 xlsx 가 이 결과를 각자 그린다.
-function buildModel(rows, titleText, labelText) {
+// selected 를 생략하면 전체 선택, sortDir 를 생략하면 내림차순 — 기존 호출부와 동일한 결과.
+function buildModel(rows, titleText, labelText, selected, sortDir) {
   const n = rows.length;
+  if (!selected) selected = rows.map(() => true);
+  if (!sortDir) sortDir = 'desc';
   const cells = [];
   const merges = [];
   const put = (r, c, v, s, edit) => cells.push(edit ? { r: r, c: c, v: v, s: s, edit: edit } : { r: r, c: c, v: v, s: s });
@@ -182,20 +191,22 @@ function buildModel(rows, titleText, labelText) {
     }
   }
 
-  // 사이드 표 P/Q/R — Q는 홀수 열 값 전체, R은 짝수 열 값 전체를 내림차순으로.
-  // 아래 k-바깥/i-안쪽 순회는 그냥 편한 순서일 뿐이다 — qs/rs 를 각자 정렬해서 쓰므로
-  // 수집 순서(중첩 방향)는 어떤 입력에도 결과에 영향을 주지 않는다.
+  // 사이드 표 P/Q/R — 체크박스로 선택된 행만, Q는 홀수 열 값을, R은 짝수 열 값을
+  // sortDir 방향으로 정렬해서 담는다. 아래 k-바깥/i-안쪽 순회는 편한 순서일 뿐이다 —
+  // qs/rs 를 정렬해서 쓰므로 수집 순서(중첩 방향)는 결과에 영향을 주지 않는다.
   put(1, COL.P, null, 'gray');
   put(2, COL.P, null, 'gray');
   const qs = [], rs = [];
   for (let k = 0; k < 6; k++) {
     for (let i = 0; i < n; i++) {
+      if (!selected[i]) continue;
       qs.push(rows[i][2 * k]);       // 1,3,5,7,9,11 번째 열 (0-based 0,2,4,...)
       rs.push(rows[i][2 * k + 1]);   // 2,4,6,8,10,12 번째 열
     }
   }
-  qs.sort((a, b) => b - a);
-  rs.sort((a, b) => b - a);
+  const cmp = sortDir === 'asc' ? (a, b) => a - b : (a, b) => b - a;
+  qs.sort(cmp);
+  rs.sort(cmp);
   for (let i = 0; i < qs.length; i++) {
     const r = 3 + i;
     put(r, COL.P, i + 1, 'gray');
@@ -208,7 +219,9 @@ function buildModel(rows, titleText, labelText) {
     merges: merges,
     colWidths: { 16: 5.125 },   // VBA ColumnWidth 4.5 의 엑셀 저장값
     rowHeight: 16.5,
-    maxRow: 2 + 6 * n,          // 사이드 표가 본문(2+2n)보다 항상 길다
+    // 전체 선택이면 사이드 표(6n)가 항상 본문(2n)보다 길지만, 일부만 선택하면
+    // 사이드 표가 더 짧아질 수 있으므로 둘 중 큰 쪽으로 맞춘다.
+    maxRow: 2 + Math.max(2 * n, qs.length),
     maxCol: COL.R,
   };
 }
@@ -280,6 +293,7 @@ root.APP = {
   parseCSV: parseCSV,
   buildModel: buildModel,
   STYLES: STYLES,
+  COL: COL,
   FONT_NAME: FONT_NAME,
   FONT_SIZE: FONT_SIZE,
   FONT_FALLBACK: FONT_FALLBACK,
@@ -299,9 +313,10 @@ root.APP = {
   const previewEl = document.getElementById('preview');
   const dlOneEl = document.getElementById('dl-one');
   const dlAllEl = document.getElementById('dl-all');
+  const sortDirEl = document.getElementById('sortDir');
 
-  let entries = [];      // {name, base, rows, error}
-  let selected = -1;
+  let entries = [];      // {name, base, rows, error, included}
+  let selected = -1;     // 선택된 "파일" 의 entries 인덱스 — 아래 entry.included(행별 체크박스)와는 별개
 
   // 엑셀 저장 너비 → 화면 px. 폰트에 따라 달라지므로 여기 두 상수만 조정하면 된다.
   const PX_PER_WIDTH = 7;
@@ -312,7 +327,7 @@ root.APP = {
   const escapeHtml = s => String(s).replace(/[&<>"]/g,
     ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
-  function renderPreview(model) {
+  function renderPreview(model, included) {
     const covered = new Set();
     const span = new Map();
     for (const m of model.merges) {
@@ -325,7 +340,14 @@ root.APP = {
     }
     const byPos = new Map(model.cells.map(x => [x.r + ',' + x.c, x]));
 
-    let html = '<table class="sheet" style="font:' + APP.FONT_SIZE + 'pt \'' + APP.FONT_NAME + '\', ' + APP.FONT_FALLBACK + '"><colgroup>';
+    // 데이터 행(실제 값이 있는 줄)의 시트 행 번호 → CSV 행 인덱스. 그 행의 첫 데이터
+    // 열(COL.C, 0번째 값)엔 항상 edit 태그가 붙어 있으므로 이를 체크박스 배치에 재사용한다.
+    const rowIndexBySheetRow = new Map();
+    for (const c of model.cells) {
+      if (c.edit && c.c === APP.COL.C) rowIndexBySheetRow.set(c.r, c.edit.row);
+    }
+
+    let html = '<table class="sheet" style="font:' + APP.FONT_SIZE + 'pt \'' + APP.FONT_NAME + '\', ' + APP.FONT_FALLBACK + '"><colgroup><col style="width:22px">';
     for (let c = 1; c <= model.maxCol; c++) {
       const w = model.colWidths[c] === undefined ? DEFAULT_WIDTH : model.colWidths[c];
       html += '<col style="width:' + colPx(w) + 'px">';
@@ -334,6 +356,12 @@ root.APP = {
 
     for (let r = 1; r <= model.maxRow; r++) {
       html += '<tr style="height:' + (model.rowHeight / 0.75) + 'px">';   // pt → px
+      if (rowIndexBySheetRow.has(r)) {
+        const i = rowIndexBySheetRow.get(r);
+        html += '<td class="rowsel"><input type="checkbox" data-row-select="' + i + '"' + (included[i] ? ' checked' : '') + '></td>';
+      } else {
+        html += '<td class="rowsel"></td>';
+      }
       for (let c = 1; c <= model.maxCol; c++) {
         const key = r + ',' + c;
         if (covered.has(key)) continue;
@@ -366,8 +394,9 @@ root.APP = {
     dlAllEl.disabled = ok.length === 0;
 
     if (selected < 0) { previewEl.innerHTML = ''; return; }
-    const model = APP.buildModel(entries[selected].rows, titleEl.value, labelEl.value);
-    previewEl.innerHTML = renderPreview(model);
+    const entry = entries[selected];
+    const model = APP.buildModel(entry.rows, titleEl.value, labelEl.value, entry.included, sortDirEl.value);
+    previewEl.innerHTML = renderPreview(model, entry.included);
   }
 
   filesEl.addEventListener('change', async () => {
@@ -381,6 +410,7 @@ root.APP = {
         base: f.name.replace(/\.[^.]*$/, ''),
         rows: res.rows || null,
         error: res.error || null,
+        included: res.rows ? res.rows.map(() => true) : null,   // 행별 체크박스, 기본 전체 선택
       });
     }
     selected = entries.findIndex(e => !e.error);
@@ -397,7 +427,7 @@ root.APP = {
   });
 
   async function download(entry) {
-    const model = APP.buildModel(entry.rows, titleEl.value, labelEl.value);
+    const model = APP.buildModel(entry.rows, titleEl.value, labelEl.value, entry.included, sortDirEl.value);
     const buf = await APP.toXlsx(model);
     const blob = new Blob([buf], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -483,8 +513,16 @@ root.APP = {
     draw();
   });
 
+  previewEl.addEventListener('change', ev => {
+    const cb = ev.target.closest('input[data-row-select]');
+    if (!cb) return;
+    entries[selected].included[Number(cb.dataset.rowSelect)] = cb.checked;
+    draw();
+  });
+
   titleEl.addEventListener('input', draw);
   labelEl.addEventListener('input', draw);
+  sortDirEl.addEventListener('change', draw);
 })();
 </script>
 </body>
