@@ -121,6 +121,37 @@ async function main() {
   check('n=5 의 마지막 B 그룹은 B11:B12', hasMerge(M5, 11, 2, 12, 2), JSON.stringify(M5.merges.filter(m => m.c1 === 2)));
   check('n=5 의 마지막 A 그룹은 A11:A12', hasMerge(M5, 11, 1, 12, 1), JSON.stringify(M5.merges.filter(m => m.c1 === 1 && m.r1 !== 1)));
 
+  section('Task 5: 사이드 표와 치수');
+  check('P1 = 값 없는 gray', at(1, 16) && at(1, 16).v === null && at(1, 16).s === 'gray', JSON.stringify(at(1, 16)));
+  check('P2 = 값 없는 gray', at(2, 16) && at(2, 16).v === null && at(2, 16).s === 'gray');
+  check('P3 = 1, gray', at(3, 16) && at(3, 16).v === 1 && at(3, 16).s === 'gray');
+  check('마지막 P행 = 72', at(74, 16) && at(74, 16).v === 72, JSON.stringify(at(74, 16)));
+
+  // 홀수 열(1,3,5,7,9,11) 최대는 989, 짝수 열(2,4,...) 최대는 996
+  check('Q3 = 홀수 열 최대 989', at(3, 17) && at(3, 17).v === 989 && at(3, 17).s === 'data', JSON.stringify(at(3, 17)));
+  check('R3 = 짝수 열 최대 996', at(3, 18) && at(3, 18).v === 996 && at(3, 18).s === 'data');
+
+  const qCol = [];
+  for (let r = 3; r <= 74; r++) qCol.push(at(r, 17).v);
+  check('Q는 72개', qCol.length === 72);
+  check('Q는 내림차순', qCol.every((v, i) => i === 0 || qCol[i - 1] >= v));
+  const qExpected = [];
+  for (let k = 0; k < 6; k++) for (let i = 0; i < 12; i++) qExpected.push(rows12[i][2 * k]);
+  qExpected.sort((a, b) => b - a);
+  check('Q 내용이 홀수 열 전체와 일치', JSON.stringify(qCol) === JSON.stringify(qExpected));
+
+  const rCol = [];
+  for (let r = 3; r <= 74; r++) rCol.push(at(r, 18).v);
+  const rExpected = [];
+  for (let k = 0; k < 6; k++) for (let i = 0; i < 12; i++) rExpected.push(rows12[i][2 * k + 1]);
+  rExpected.sort((a, b) => b - a);
+  check('R 내용이 짝수 열 전체와 일치', JSON.stringify(rCol) === JSON.stringify(rExpected));
+
+  check('P열 너비 5.125', M.colWidths[16] === 5.125, JSON.stringify(M.colWidths));
+  check('행 높이 16.5', M.rowHeight === 16.5);
+  check('maxRow = 2 + 6n = 74', M.maxRow === 74, 'maxRow=' + M.maxRow);
+  check('maxCol = 18', M.maxCol === 18);
+
   console.log(failures === 0 ? '\n전체 통과' : '\n실패 ' + failures + '건');
   process.exit(failures ? 1 : 0);
 }

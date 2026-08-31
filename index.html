@@ -147,12 +147,31 @@ function buildModel(rows, titleText, labelText) {
     }
   }
 
+  // 사이드 표 P/Q/R — Q는 홀수 열 값 전체, R은 짝수 열 값 전체를 내림차순으로
+  put(1, COL.P, null, 'gray');
+  put(2, COL.P, null, 'gray');
+  const qs = [], rs = [];
+  for (let k = 0; k < 6; k++) {
+    for (let i = 0; i < n; i++) {
+      qs.push(rows[i][2 * k]);       // 1,3,5,7,9,11 번째 열 (0-based 0,2,4,...)
+      rs.push(rows[i][2 * k + 1]);   // 2,4,6,8,10,12 번째 열
+    }
+  }
+  qs.sort((a, b) => b - a);
+  rs.sort((a, b) => b - a);
+  for (let i = 0; i < qs.length; i++) {
+    const r = 3 + i;
+    put(r, COL.P, i + 1, 'gray');
+    put(r, COL.Q, qs[i], 'data');
+    put(r, COL.R, rs[i], 'data');
+  }
+
   return {
     cells: cells,
     merges: merges,
-    colWidths: {},
+    colWidths: { 16: 5.125 },   // VBA ColumnWidth 4.5 의 엑셀 저장값
     rowHeight: 16.5,
-    maxRow: 2 + 2 * n,
+    maxRow: 2 + 6 * n,          // 사이드 표가 본문(2+2n)보다 항상 길다
     maxCol: COL.R,
   };
 }
