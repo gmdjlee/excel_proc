@@ -2,4 +2,5 @@
 .worktrees/
 .superpowers/
 node_modules/
-release/
+release/*
+!release/*.exe
