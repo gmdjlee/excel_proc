@@ -45,6 +45,8 @@ table.sheet td.rowsel input { margin: 0; cursor: pointer; }
 <footer>
   <button id="dl-one" disabled>선택 내려받기</button>
   <button id="dl-all" disabled>전체 내려받기</button>
+  <button id="sel-all" disabled>행 전체선택</button>
+  <button id="sel-none" disabled>행 전체해제</button>
 </footer>
 
 <script>
@@ -318,6 +320,8 @@ root.APP = {
   const previewEl = document.getElementById('preview');
   const dlOneEl = document.getElementById('dl-one');
   const dlAllEl = document.getElementById('dl-all');
+  const selAllEl = document.getElementById('sel-all');
+  const selNoneEl = document.getElementById('sel-none');
   const sortDirEl = document.getElementById('sortDir');
   const labelAEl = document.getElementById('labelA');
   const labelBEl = document.getElementById('labelB');
@@ -399,6 +403,7 @@ root.APP = {
     const ok = entries.filter(e => !e.error);
     dlOneEl.disabled = selected < 0;
     dlAllEl.disabled = ok.length === 0;
+    selAllEl.disabled = selNoneEl.disabled = selected < 0;
 
     if (selected < 0) { previewEl.innerHTML = ''; return; }
     const entry = entries[selected];
@@ -524,6 +529,15 @@ root.APP = {
     const cb = ev.target.closest('input[data-row-select]');
     if (!cb) return;
     entries[selected].included[Number(cb.dataset.rowSelect)] = cb.checked;
+    draw();
+  });
+
+  selAllEl.addEventListener('click', () => {
+    entries[selected].included.fill(true);
+    draw();
+  });
+  selNoneEl.addEventListener('click', () => {
+    entries[selected].included.fill(false);
     draw();
   });
 
