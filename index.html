@@ -402,14 +402,26 @@ root.APP = {
   dlOneEl.addEventListener('click', async () => {
     if (selected < 0) return;
     dlOneEl.disabled = true;
-    try { await download(entries[selected]); } finally { draw(); }
+    const entry = entries[selected];
+    try {
+      await download(entry);
+    } catch (err) {
+      entry.error = '내려받기 실패: ' + err.message;
+    } finally { draw(); }
   });
 
   dlAllEl.addEventListener('click', async () => {
     dlAllEl.disabled = true;
     try {
-      // 순차 저장. 브라우저가 다중 내려받기 허용을 한 번 물을 수 있다.
-      for (const e of entries) if (!e.error) await download(e);
+      // 순차 저장. 한 파일이 실패해도 나머지는 계속 — VBA RunBatch 와 같다.
+      for (const e of entries) {
+        if (e.error) continue;
+        try {
+          await download(e);
+        } catch (err) {
+          e.error = '내려받기 실패: ' + err.message;
+        }
+      }
     } finally { draw(); }
   });
 
