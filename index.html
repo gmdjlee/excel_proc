@@ -176,12 +176,53 @@ function buildModel(rows, titleText, labelText) {
   };
 }
 
+const THIN = { style: 'thin' };
+const BORDER_ALL = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+
+function toXlsx(model) {
+  const wb = new ExcelJS.Workbook();
+  // ponytail: _themes 는 ExcelJS 공개 API가 아니다. 번들을 인라인해 버전을 고정했으므로
+  // 지금은 안전하다. 라이브러리를 갈아끼워 색이 틀어지면 STYLES 의 theme/tint 를
+  // 해결된 ARGB (accent2=F8CBAD 등) 로 바꾸는 것이 대체 경로다.
+  wb._themes = { theme1: OFFICE_THEME_XML };
+
+  const ws = wb.addWorksheet('Sheet1');
+
+  // 스타일을 먼저, 병합을 나중에. ExcelJS 가 마스터 스타일을 슬레이브에 전파한다.
+  for (let i = 0; i < model.cells.length; i++) {
+    const item = model.cells[i];
+    const cell = ws.getCell(item.r, item.c);
+    if (item.v !== null) cell.value = item.v;
+    cell.font = { name: FONT_NAME, size: FONT_SIZE };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = BORDER_ALL;
+    const st = STYLES[item.s];
+    if (st.theme !== null) {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { theme: st.theme, tint: st.tint } };
+    }
+  }
+
+  for (let i = 0; i < model.merges.length; i++) {
+    const m = model.merges[i];
+    ws.mergeCells(m.r1, m.c1, m.r2, m.c2);
+  }
+
+  const widths = Object.keys(model.colWidths);
+  for (let i = 0; i < widths.length; i++) {
+    ws.getColumn(Number(widths[i])).width = model.colWidths[widths[i]];
+  }
+  for (let r = 1; r <= model.maxRow; r++) ws.getRow(r).height = model.rowHeight;
+
+  return wb.xlsx.writeBuffer();
+}
+
 root.APP = {
   OFFICE_THEME_XML: OFFICE_THEME_XML,
   parseCSV: parseCSV,
   buildModel: buildModel,
   STYLES: STYLES,
   COL: COL,
+  toXlsx: toXlsx,
 };
 
 })(typeof window !== 'undefined' ? window : this);

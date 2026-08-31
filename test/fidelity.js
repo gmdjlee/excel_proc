@@ -152,6 +152,41 @@ async function main() {
   check('maxRow = 2 + 6n = 74', M.maxRow === 74, 'maxRow=' + M.maxRow);
   check('maxCol = 18', M.maxCol === 18);
 
+  section('Task 6: toXlsx');
+  const buf = await app.APP.toXlsx(M);
+  check('바이트가 나온다', buf && buf.byteLength > 5000, 'bytes=' + (buf && buf.byteLength));
+
+  const back = new app.ExcelJS.Workbook();
+  await back.xlsx.load(buf);
+  const bws = back.getWorksheet('Sheet1');
+  check('시트 이름 Sheet1', !!bws);
+
+  const fillOf = c => (c.fill && c.fill.fgColor)
+    ? 'theme=' + c.fill.fgColor.theme + ' tint=' + Math.round(c.fill.fgColor.tint * 1e6) / 1e6
+    : 'none';
+
+  check('A1 값', bws.getCell('A1').value === '8/28 111G');
+  check('A1 채우기 accent2', fillOf(bws.getCell('A1')) === 'theme=5 tint=0.599994', fillOf(bws.getCell('A1')));
+  check('E1 (병합 슬레이브) 도 accent2', fillOf(bws.getCell('E1')) === 'theme=5 tint=0.599994', fillOf(bws.getCell('E1')));
+  check('Q1 채우기 gray', fillOf(bws.getCell('Q1')) === 'theme=0 tint=-0.149998', fillOf(bws.getCell('Q1')));
+  check('Q2 채우기 accent5', fillOf(bws.getCell('Q2')) === 'theme=8 tint=0.599994', fillOf(bws.getCell('Q2')));
+  check('R2 채우기 accent4', fillOf(bws.getCell('R2')) === 'theme=7 tint=0.799982', fillOf(bws.getCell('R2')));
+  check('C4 는 채우기 없음', fillOf(bws.getCell('C4')) === 'none', fillOf(bws.getCell('C4')));
+  check('O3 은 값 없이 accent2', bws.getCell('O3').value === null && fillOf(bws.getCell('O3')) === 'theme=5 tint=0.599994');
+
+  check('C4 폰트', bws.getCell('C4').font.name === '맑은 고딕' && bws.getCell('C4').font.size === 11, JSON.stringify(bws.getCell('C4').font));
+  check('C4 정렬', bws.getCell('C4').alignment.horizontal === 'center' && bws.getCell('C4').alignment.vertical === 'middle');
+  check('C4 사방 테두리', ['top','left','bottom','right'].every(k => bws.getCell('C4').border[k].style === 'thin'));
+
+  check('병합 11개', bws.model.merges.length === 11, JSON.stringify(bws.model.merges));
+  check('P열 너비 5.125', bws.getColumn(16).width === 5.125, 'w=' + bws.getColumn(16).width);
+  check('1행 높이 16.5', bws.getRow(1).height === 16.5);
+  check('74행 높이 16.5', bws.getRow(74).height === 16.5);
+
+  // 테마 교체가 먹었는지 — 안 먹으면 accent2 가 C0504D (Office 2007) 로 남는다
+  const themeXml = back._themes && back._themes.theme1;
+  check('테마가 Office 2013+ (accent2=ED7D31)', /ED7D31/.test(themeXml || ''), 'theme len=' + (themeXml || '').length);
+
   console.log(failures === 0 ? '\n전체 통과' : '\n실패 ' + failures + '건');
   process.exit(failures ? 1 : 0);
 }
