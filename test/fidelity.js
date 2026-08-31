@@ -103,6 +103,24 @@ async function main() {
   check('O3 = 빈 칸막이, accent2', at(3, 15) && at(3, 15).v === null && at(3, 15).s === 'accent2');
   check('O4 = 빈 칸막이, data', at(4, 15) && at(4, 15).v === null && at(4, 15).s === 'data');
 
+  section('Task 4: A/B 그룹 병합');
+  check('B 그룹 1: B3:B6 = 1', hasMerge(M, 3, 2, 6, 2) && at(3, 2) && at(3, 2).v === 1 && at(3, 2).s === 'accent2');
+  check('B 그룹 2: B7:B10 = 2', hasMerge(M, 7, 2, 10, 2) && at(7, 2) && at(7, 2).v === 2);
+  check('B 그룹 6: B23:B26 = 6', hasMerge(M, 23, 2, 26, 2) && at(23, 2) && at(23, 2).v === 6);
+  check('B 그룹 수 = 6', M.merges.filter(m => m.c1 === 2).length === 6);
+
+  check('A 그룹 1: A3:A10 = 1', hasMerge(M, 3, 1, 10, 1) && at(3, 1) && at(3, 1).v === 1 && at(3, 1).s === 'accent2');
+  check('A 그룹 2: A11:A18 = 2', hasMerge(M, 11, 1, 18, 1) && at(11, 1) && at(11, 1).v === 2);
+  check('A 그룹 3: A19:A26 = 3', hasMerge(M, 19, 1, 26, 1) && at(19, 1) && at(19, 1).v === 3);
+  check('A 그룹 수 = 3', M.merges.filter(m => m.c1 === 1 && m.r1 !== 1).length === 3);
+
+  check('병합 총 개수 = 11', M.merges.length === 11, 'merges=' + M.merges.length);
+
+  // 나누어떨어지지 않는 n 에서 마지막 그룹이 잘려야 한다
+  const M5 = app.APP.buildModel(rows12.slice(0, 5), 'T', 'L');
+  check('n=5 의 마지막 B 그룹은 B11:B12', hasMerge(M5, 11, 2, 12, 2), JSON.stringify(M5.merges.filter(m => m.c1 === 2)));
+  check('n=5 의 마지막 A 그룹은 A11:A12', hasMerge(M5, 11, 1, 12, 1), JSON.stringify(M5.merges.filter(m => m.c1 === 1 && m.r1 !== 1)));
+
   console.log(failures === 0 ? '\n전체 통과' : '\n실패 ' + failures + '건');
   process.exit(failures ? 1 : 0);
 }

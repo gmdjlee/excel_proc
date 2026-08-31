@@ -133,6 +133,20 @@ function buildModel(rows, titleText, labelText) {
     put(dataRow,   COL.O, null, 'data');
   }
 
+  // A/B 그룹 라벨 — B는 CSV 2행씩, A는 4행씩 묶어 병합
+  const GROUPS = [{ col: COL.B, size: 2 }, { col: COL.A, size: 4 }];
+  for (let gi = 0; gi < GROUPS.length; gi++) {
+    const col = GROUPS[gi].col, size = GROUPS[gi].size;
+    for (let g = 0; g * size < n; g++) {
+      const first = g * size + 1;
+      const last = Math.min((g + 1) * size, n);
+      const rFrom = 3 + (first - 1) * 2;
+      const rTo   = 3 + (last  - 1) * 2 + 1;
+      put(rFrom, col, g + 1, 'accent2');
+      merges.push({ r1: rFrom, c1: col, r2: rTo, c2: col });
+    }
+  }
+
   return {
     cells: cells,
     merges: merges,
