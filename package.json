@@ -1,0 +1,22 @@
+{
+  "name": "csv-excel-converter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CSV를 서식 있는 xlsx로 변환하는 index.html을 여는 Electron 데스크톱 래퍼",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.local.csvexcelconverter",
+    "productName": "CSV-Excel-Converter",
+    "files": ["index.html", "main.js"],
+    "directories": { "output": "release" },
+    "win": { "target": "portable" }
+  }
+}

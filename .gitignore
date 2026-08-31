@@ -1,3 +1,5 @@
 ~$*.xls*
 .worktrees/
 .superpowers/
+node_modules/
+release/
