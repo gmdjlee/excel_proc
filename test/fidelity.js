@@ -201,6 +201,19 @@ async function main() {
   const Mexplicit = app.APP.buildModel(rows12, '8/28 111G', 'XX', rows12.map(() => true), 'desc');
   check('selected/sortDir 인자를 생략하면 전체선택+내림차순과 동일', JSON.stringify(Mexplicit) === JSON.stringify(M), 'differs');
 
+  section('A/B 헤더 텍스트 커스터마이즈');
+  check('aText/bText 생략 시 기본값 A/B', at(2, 3).v === 'A' && at(2, 4).v === 'B' && at(2, 17).v === 'A' && at(2, 18).v === 'B');
+  const Mcustom = app.APP.buildModel(rows12, '8/28 111G', 'XX', undefined, undefined, '매수', '매도');
+  const atC = (r, c) => cellAt(Mcustom, r, c);
+  check('C2 커스텀 라벨', atC(2, 3).v === '매수' && atC(2, 3).s === 'accent2', JSON.stringify(atC(2, 3)));
+  check('D2 커스텀 라벨', atC(2, 4).v === '매도');
+  check('N2 커스텀 라벨(12번째, 짝수)', atC(2, 14).v === '매도');
+  check('Q2 커스텀 라벨, accent5 유지', atC(2, 17).v === '매수' && atC(2, 17).s === 'accent5');
+  check('R2 커스텀 라벨, accent4 유지', atC(2, 18).v === '매도' && atC(2, 18).s === 'accent4');
+
+  const Mempty = app.APP.buildModel(rows12, '8/28 111G', 'XX', undefined, undefined, '', '');
+  check('빈 문자열을 명시하면 그대로 빈 헤더 (undefined 만 기본값으로 대체)', cellAt(Mempty, 2, 3).v === '' && cellAt(Mempty, 2, 4).v === '');
+
   section('Task 6: toXlsx');
   const buf = await app.APP.toXlsx(M);
   check('바이트가 나온다', buf && buf.byteLength > 5000, 'bytes=' + (buf && buf.byteLength));
