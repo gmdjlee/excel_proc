@@ -19,6 +19,9 @@ footer { margin-top: 12px; display: flex; gap: 8px; }
 table.sheet { border-collapse: collapse; table-layout: fixed; }
 table.sheet td { border: 1px solid #000; text-align: center; vertical-align: middle; overflow: hidden; white-space: nowrap; padding: 0; }
 table.sheet td.empty { border: none; }
+table.sheet td.editable { cursor: text; }
+table.sheet td.editable:hover, table.sheet td.editable:focus { outline: 1px dashed #666; outline-offset: -1px; }
+table.sheet td.editable.bad-input { outline: 2px solid #c00; outline-offset: -2px; }
 </style>
 </head>
 <body>
@@ -139,7 +142,7 @@ function buildModel(rows, titleText, labelText) {
   const n = rows.length;
   const cells = [];
   const merges = [];
-  const put = (r, c, v, s) => cells.push({ r: r, c: c, v: v, s: s });
+  const put = (r, c, v, s, edit) => cells.push(edit ? { r: r, c: c, v: v, s: s, edit: edit } : { r: r, c: c, v: v, s: s });
 
   // 1행: 제목 A1:O1, 라벨 Q1:R1. 병합에 덮인 셀은 넣지 않는다 —
   // toXlsx 가 병합 사각형 전체에 직접 서식을 입히고, 미리보기는 colspan/rowspan 으로 처리한다.
@@ -159,7 +162,7 @@ function buildModel(rows, titleText, labelText) {
     const dataRow = headerRow + 1;
     for (let c = 0; c < NCOL; c++) {
       put(headerRow, COL.C + c, c + 1, 'accent2');
-      put(dataRow,   COL.C + c, rows[i][c], 'data');
+      put(dataRow,   COL.C + c, rows[i][c], 'data', { row: i, col: c });
     }
     put(headerRow, COL.O, null, 'accent2');   // 빈 칸막이
     put(dataRow,   COL.O, null, 'data');
@@ -339,7 +342,10 @@ root.APP = {
         const cell = byPos.get(key);
         if (!cell) { html += '<td class="empty"' + attrs + '></td>'; continue; }
         const text = cell.v === null ? '' : escapeHtml(cell.v);
-        html += '<td style="background:' + APP.STYLES[cell.s].css + '"' + attrs + '>' + text + '</td>';
+        const editAttrs = cell.edit
+          ? ' class="editable" contenteditable="true" data-row="' + cell.edit.row + '" data-col="' + cell.edit.col + '"'
+          : '';
+        html += '<td style="background:' + APP.STYLES[cell.s].css + '"' + attrs + editAttrs + '>' + text + '</td>';
       }
       html += '</tr>';
     }
@@ -428,6 +434,53 @@ root.APP = {
         }
       }
     } finally { draw(); }
+  });
+
+  // 본문 데이터 셀 편집 — td.editable 에만 있는 data-row/data-col 로 원본 위치를 찾는다.
+  // previewEl 자체는 draw() 로도 교체되지 않으므로 위임 리스너 하나로 매 렌더 이후에도 계속 동작한다.
+  let editOriginal = null;   // 편집 시작 시점의 텍스트, Escape 로 되돌리기 위해
+
+  previewEl.addEventListener('focusin', ev => {
+    const td = ev.target.closest('td.editable');
+    if (td) editOriginal = td.textContent;
+  });
+
+  previewEl.addEventListener('keydown', ev => {
+    const td = ev.target.closest('td.editable');
+    if (!td) return;
+    if (ev.key === 'Enter') {
+      ev.preventDefault();   // contenteditable 에서 줄바꿈 삽입 대신 확정
+      td.blur();
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      td.textContent = editOriginal;
+      td.blur();
+    }
+  });
+
+  previewEl.addEventListener('paste', ev => {
+    const td = ev.target.closest('td.editable');
+    if (!td) return;
+    ev.preventDefault();
+    // execCommand 는 표준에서 빠졌지만 지원 중단 없이 여전히 동작한다 — contenteditable
+    // 에 커서 위치대로 일반 텍스트만 넣는 대안(Selection/Range 직접 조작)은 이 한 줄짜리
+    // 요구에 비해 코드가 훨씬 길어져 지금은 이걸로 충분하다.
+    document.execCommand('insertText', false, (ev.clipboardData || window.clipboardData).getData('text/plain'));
+  });
+
+  previewEl.addEventListener('focusout', ev => {
+    const td = ev.target.closest('td.editable');
+    if (!td) return;
+    const row = Number(td.dataset.row), col = Number(td.dataset.col);
+    const n = Number(td.textContent.trim());
+    if (td.textContent.trim() === '' || !Number.isFinite(n)) {
+      td.textContent = editOriginal;
+      td.classList.add('bad-input');
+      setTimeout(() => td.classList.remove('bad-input'), 800);
+      return;
+    }
+    entries[selected].rows[row][col] = n;
+    draw();
   });
 
   titleEl.addEventListener('input', draw);

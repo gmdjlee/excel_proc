@@ -107,6 +107,17 @@ async function main() {
     M.cells.every(c => app.APP.STYLES[c.s] !== undefined),
     [...new Set(M.cells.map(c => c.s))].join(','));
 
+  section('셀 편집 지원 — buildModel 이 본문 데이터 셀에 원본 위치를 표시한다');
+  check('C4(첫 데이터 값) 에 편집 태그', at(4, 3) && at(4, 3).edit && at(4, 3).edit.row === 0 && at(4, 3).edit.col === 0,
+    JSON.stringify(at(4, 3) && at(4, 3).edit));
+  check('N26(마지막 데이터 값) 에 편집 태그', at(26, 14) && at(26, 14).edit && at(26, 14).edit.row === 11 && at(26, 14).edit.col === 11,
+    JSON.stringify(at(26, 14) && at(26, 14).edit));
+  check('머리글 셀(C3)엔 편집 태그 없음', at(3, 3) && at(3, 3).edit === undefined);
+  check('사이드 표(Q3)엔 편집 태그 없음', at(3, 17) && at(3, 17).edit === undefined);
+  check('O열 칸막이(O4)엔 편집 태그 없음', at(4, 15) && at(4, 15).edit === undefined);
+  const taggedCount = M.cells.filter(c => c.edit).length;
+  check('편집 태그가 붙은 셀 수 = 12행 × 12열 = 144', taggedCount === 144, 'tagged=' + taggedCount);
+
   section('Task 4: A/B 그룹 병합');
   check('B 그룹 1: B3:B6 = 1', hasMerge(M, 3, 2, 6, 2) && at(3, 2) && at(3, 2).v === 1 && at(3, 2).s === 'accent2');
   check('B 그룹 2: B7:B10 = 2', hasMerge(M, 7, 2, 10, 2) && at(7, 2) && at(7, 2).v === 2);
