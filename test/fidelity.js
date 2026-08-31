@@ -35,6 +35,14 @@ function loadApp() {
   return sandbox;
 }
 
+// 모델에서 셀 하나를 집어낸다
+function cellAt(model, r, c) {
+  return model.cells.find(x => x.r === r && x.c === c) || null;
+}
+function hasMerge(model, r1, c1, r2, c2) {
+  return model.merges.some(m => m.r1 === r1 && m.c1 === c1 && m.r2 === r2 && m.c2 === c2);
+}
+
 async function main() {
   section('Task 1: 하네스');
   const app = loadApp();
@@ -67,6 +75,33 @@ async function main() {
 
   const twoLines = P(base + '\n' + base.split(',').slice(0, 11).join(','));
   check('둘째 줄 오류는 줄 번호 2', /^2번째/.test(twoLines.error || ''), twoLines.error);
+
+  section('Task 3: buildModel 머리글과 본문');
+  const rows12 = app.APP.parseCSV(fs.readFileSync(path.join(ROOT, 'random_data.csv'), 'utf8')).rows;
+  check('샘플이 12행으로 파싱된다', rows12.length === 12, 'n=' + rows12.length);
+
+  const M = app.APP.buildModel(rows12, '8/28 111G', 'XX');
+  const at = (r, c) => cellAt(M, r, c);
+
+  check('A1 = 제목, accent2', at(1, 1) && at(1, 1).v === '8/28 111G' && at(1, 1).s === 'accent2', JSON.stringify(at(1, 1)));
+  check('A1:O1 병합', hasMerge(M, 1, 1, 1, 15));
+  check('제목 병합에 덮인 셀은 모델에 없다', at(1, 5) === null);
+  check('Q1 = 라벨, gray', at(1, 17) && at(1, 17).v === 'XX' && at(1, 17).s === 'gray', JSON.stringify(at(1, 17)));
+  check('Q1:R1 병합', hasMerge(M, 1, 17, 1, 18));
+
+  check('C2 = A, accent2', at(2, 3) && at(2, 3).v === 'A' && at(2, 3).s === 'accent2');
+  check('D2 = B', at(2, 4) && at(2, 4).v === 'B');
+  check('N2 = B (12번째)', at(2, 14) && at(2, 14).v === 'B');
+  check('Q2 = A, accent5', at(2, 17) && at(2, 17).v === 'A' && at(2, 17).s === 'accent5');
+  check('R2 = B, accent4', at(2, 18) && at(2, 18).v === 'B' && at(2, 18).s === 'accent4');
+
+  check('C3 = 1 (머리글 행)', at(3, 3) && at(3, 3).v === 1 && at(3, 3).s === 'accent2');
+  check('N3 = 12', at(3, 14) && at(3, 14).v === 12);
+  check('C4 = 첫 값 465, data', at(4, 3) && at(4, 3).v === 465 && at(4, 3).s === 'data');
+  check('N4 = 마지막 값 406', at(4, 14) && at(4, 14).v === 406);
+  check('마지막 데이터 행 N26 = 99', at(26, 14) && at(26, 14).v === 99, JSON.stringify(at(26, 14)));
+  check('O3 = 빈 칸막이, accent2', at(3, 15) && at(3, 15).v === null && at(3, 15).s === 'accent2');
+  check('O4 = 빈 칸막이, data', at(4, 15) && at(4, 15).v === null && at(4, 15).s === 'data');
 
   console.log(failures === 0 ? '\n전체 통과' : '\n실패 ' + failures + '건');
   process.exit(failures ? 1 : 0);

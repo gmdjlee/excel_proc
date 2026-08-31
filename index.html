@@ -89,9 +89,66 @@ function parseCSV(text) {
   return { rows: rows };
 }
 
+const COL = { A: 1, B: 2, C: 3, O: 15, P: 16, Q: 17, R: 18 };
+const NCOL = 12;                 // 데이터 열 수 (C..N)
+const FONT_NAME = '맑은 고딕';
+const FONT_SIZE = 11;
+
+const STYLES = {
+  accent2: { css: '#F8CBAD', theme: 5,    tint:  0.5999938962981048 },
+  accent5: { css: '#BDD7EE', theme: 8,    tint:  0.5999938962981048 },
+  accent4: { css: '#FFF2CC', theme: 7,    tint:  0.7999816888943144 },
+  gray:    { css: '#D9D9D9', theme: 0,    tint: -0.1499984740745262 },
+  data:    { css: '#FFFFFF', theme: null, tint:  0 },
+};
+
+// BuildSheet 를 이식한 유일한 지점. 미리보기와 xlsx 가 이 결과를 각자 그린다.
+function buildModel(rows, titleText, labelText) {
+  const n = rows.length;
+  const cells = [];
+  const merges = [];
+  const put = (r, c, v, s) => cells.push({ r: r, c: c, v: v, s: s });
+
+  // 1행: 제목 A1:O1, 라벨 Q1:R1. 병합에 덮인 셀은 넣지 않는다 —
+  // ExcelJS 가 마스터 스타일을 슬레이브에 그대로 전파하고, 미리보기는 colspan 으로 처리한다.
+  put(1, COL.A, titleText, 'accent2');
+  merges.push({ r1: 1, c1: COL.A, r2: 1, c2: COL.O });
+  put(1, COL.Q, labelText, 'gray');
+  merges.push({ r1: 1, c1: COL.Q, r2: 1, c2: COL.R });
+
+  // 2행: C..N 에 A/B 반복
+  for (let i = 0; i < NCOL; i++) put(2, COL.C + i, i % 2 === 0 ? 'A' : 'B', 'accent2');
+  put(2, COL.Q, 'A', 'accent5');
+  put(2, COL.R, 'B', 'accent4');
+
+  // 본문: CSV 행마다 [머리글 행][데이터 행] 두 줄
+  for (let i = 0; i < n; i++) {
+    const headerRow = 3 + i * 2;
+    const dataRow = headerRow + 1;
+    for (let c = 0; c < NCOL; c++) {
+      put(headerRow, COL.C + c, c + 1, 'accent2');
+      put(dataRow,   COL.C + c, rows[i][c], 'data');
+    }
+    put(headerRow, COL.O, null, 'accent2');   // 빈 칸막이
+    put(dataRow,   COL.O, null, 'data');
+  }
+
+  return {
+    cells: cells,
+    merges: merges,
+    colWidths: {},
+    rowHeight: 16.5,
+    maxRow: 2 + 2 * n,
+    maxCol: COL.R,
+  };
+}
+
 root.APP = {
   OFFICE_THEME_XML: OFFICE_THEME_XML,
   parseCSV: parseCSV,
+  buildModel: buildModel,
+  STYLES: STYLES,
+  COL: COL,
 };
 
 })(typeof window !== 'undefined' ? window : this);
