@@ -54,7 +54,7 @@ async function main() {
 
   const short = P(base.split(',').slice(0, 11).join(','));
   check('11열은 실패', !!short.error, JSON.stringify(short));
-  check('11열 오류에 줄 번호', /1/.test(short.error || ''), short.error);
+  check('11열 오류에 줄 번호', /^1번째/.test(short.error || ''), short.error);
 
   const nan = P('465,x,97,596,776,652,442,626,637,96,744,406');
   check('숫자가 아니면 실패', !!nan.error, JSON.stringify(nan));
@@ -66,7 +66,7 @@ async function main() {
   check('유효 행이 없으면 실패', !!empty.error, JSON.stringify(empty));
 
   const twoLines = P(base + '\n' + base.split(',').slice(0, 11).join(','));
-  check('둘째 줄 오류는 줄 번호 2', /2/.test(twoLines.error || ''), twoLines.error);
+  check('둘째 줄 오류는 줄 번호 2', /^2번째/.test(twoLines.error || ''), twoLines.error);
 
   console.log(failures === 0 ? '\n전체 통과' : '\n실패 ' + failures + '건');
   process.exit(failures ? 1 : 0);
