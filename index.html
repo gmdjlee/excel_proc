@@ -385,6 +385,34 @@ root.APP = {
     draw();
   });
 
+  async function download(entry) {
+    const model = APP.buildModel(entry.rows, titleEl.value, labelEl.value);
+    const buf = await APP.toXlsx(model);
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = entry.base + '_result.xlsx';   // VBA 와 같은 규칙
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  dlOneEl.addEventListener('click', async () => {
+    if (selected < 0) return;
+    dlOneEl.disabled = true;
+    try { await download(entries[selected]); } finally { draw(); }
+  });
+
+  dlAllEl.addEventListener('click', async () => {
+    dlAllEl.disabled = true;
+    try {
+      // 순차 저장. 브라우저가 다중 내려받기 허용을 한 번 물을 수 있다.
+      for (const e of entries) if (!e.error) await download(e);
+    } finally { draw(); }
+  });
+
   titleEl.addEventListener('input', draw);
   labelEl.addEventListener('input', draw);
 })();
