@@ -112,6 +112,7 @@ const OFFICE_THEME_XML = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"
 function parseCSV(text) {
   const lines = text.replace(/^﻿/, '').replace(/\r/g, '').split('\n');
   const rows = [];
+  let ncol = null;   // 첫 유효 행에서 감지, 이후 모든 행이 이 열 개수와 같아야 한다
   for (let i = 0; i < lines.length; i++) {
     let t = lines[i].trim();
     // 후행 빈 열 허용: 줄 끝 콤마와 그 뒤 공백·탭을 벗겨낸다
@@ -121,8 +122,9 @@ function parseCSV(text) {
     if (t === '') continue;
 
     const parts = t.split(',');
-    if (parts.length !== 12) {
-      return { error: (i + 1) + '번째 줄이 ' + parts.length + '열입니다 (12열이어야 합니다)' };
+    if (ncol === null) ncol = parts.length;
+    if (parts.length !== ncol) {
+      return { error: (i + 1) + '번째 줄이 ' + parts.length + '열입니다 (' + ncol + '열이어야 합니다)' };
     }
     // Number('') 은 0 이므로 빈 칸을 먼저 걸러야 한다 (VBA CDbl("") 은 오류)
     const nums = parts.map(p => (p.trim() === '' ? NaN : Number(p.trim())));
@@ -136,8 +138,7 @@ function parseCSV(text) {
   return { rows: rows };
 }
 
-const COL = { A: 1, B: 2, C: 3, O: 15, P: 16, Q: 17, R: 18 };
-const NCOL = 12;                 // 데이터 열 수 (C..N)
+const COL = { A: 1, B: 2, C: 3 };   // O(칸막이)/P/Q/R 은 열 개수에 따라 buildModel 이 계산한다
 const FONT_NAME = '맑은 고딕';
 const FONT_SIZE = 11;
 // 미리보기 CSS 전용. 맑은 고딕이 한글 이름으로 등록되지 않은 환경에서도 같은 글꼴을
@@ -157,6 +158,8 @@ const STYLES = {
 // 생략하면 셀 전체 포함 — 기존 호출부와 동일한 결과.
 function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText, cellIncluded) {
   const n = rows.length;
+  const NCOL = rows[0].length;                 // 데이터 열 수 — 파일마다 다를 수 있다
+  const colO = COL.C + NCOL, colP = colO + 1, colQ = colO + 2, colR = colO + 3;
   if (!selected) selected = rows.map(() => true);
   if (!sortDir) sortDir = 'desc';
   if (!cellIncluded) cellIncluded = rows.map(row => row.map(() => true));
@@ -168,17 +171,17 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
   const merges = [];
   const put = (r, c, v, s, edit) => cells.push(edit ? { r: r, c: c, v: v, s: s, edit: edit } : { r: r, c: c, v: v, s: s });
 
-  // 1행: 제목 A1:O1, 라벨 Q1:R1. 병합에 덮인 셀은 넣지 않는다 —
+  // 1행: 제목 A1:칸막이1, 라벨 Q1:R1. 병합에 덮인 셀은 넣지 않는다 —
   // toXlsx 가 병합 사각형 전체에 직접 서식을 입히고, 미리보기는 colspan/rowspan 으로 처리한다.
   put(1, COL.A, titleText, 'accent2');
-  merges.push({ r1: 1, c1: COL.A, r2: 1, c2: COL.O });
-  put(1, COL.Q, labelText, 'gray');
-  merges.push({ r1: 1, c1: COL.Q, r2: 1, c2: COL.R });
+  merges.push({ r1: 1, c1: COL.A, r2: 1, c2: colO });
+  put(1, colQ, labelText, 'gray');
+  merges.push({ r1: 1, c1: colQ, r2: 1, c2: colR });
 
-  // 2행: C..N 에 A/B 반복
+  // 2행: 데이터 열마다 A/B 반복
   for (let i = 0; i < NCOL; i++) put(2, COL.C + i, i % 2 === 0 ? aText : bText, 'accent2');
-  put(2, COL.Q, aText, 'accent5');
-  put(2, COL.R, bText, 'accent4');
+  put(2, colQ, aText, 'accent5');
+  put(2, colR, bText, 'accent4');
 
   // 본문: CSV 행마다 [머리글 행][데이터 행] 두 줄
   for (let i = 0; i < n; i++) {
@@ -188,8 +191,8 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
       put(headerRow, COL.C + c, c + 1, 'accent2');
       put(dataRow,   COL.C + c, rows[i][c], 'data', { row: i, col: c });
     }
-    put(headerRow, COL.O, null, 'accent2');   // 빈 칸막이
-    put(dataRow,   COL.O, null, 'data');
+    put(headerRow, colO, null, 'accent2');   // 빈 칸막이
+    put(dataRow,   colO, null, 'data');
   }
 
   // A/B 그룹 라벨 — B는 CSV 2행씩, A는 4행씩 묶어 병합
@@ -207,17 +210,18 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
   }
 
   // 사이드 표 P/Q/R — 체크박스로 선택된 행 중, 편집 모드로 개별 제외되지 않은 값만
-  // Q는 홀수 열, R은 짝수 열에서 모아 sortDir 방향으로 정렬한다. 셀 단위 제외는
-  // 홀/짝 어느 한쪽에만 걸리므로 qs/rs 길이가 서로 달라질 수 있다. 아래 k-바깥/i-안쪽
-  // 순회는 편한 순서일 뿐이다 — qs/rs 를 정렬해서 쓰므로 수집 순서는 결과에 영향을 주지 않는다.
-  put(1, COL.P, null, 'gray');
-  put(2, COL.P, null, 'gray');
+  // Q는 홀수 열, R은 짝수 열에서 모아 sortDir 방향으로 정렬한다. 열 개수가 홀수면
+  // 마지막 열은 짝이 없어 Q에만 들어간다. 셀 단위 제외까지 겹치면 qs/rs 길이가 서로
+  // 달라질 수 있다. 아래 k-바깥/i-안쪽 순회는 편한 순서일 뿐이다 — qs/rs 를 정렬해서
+  // 쓰므로 수집 순서는 결과에 영향을 주지 않는다.
+  put(1, colP, null, 'gray');
+  put(2, colP, null, 'gray');
   const qs = [], rs = [];
-  for (let k = 0; k < 6; k++) {
+  for (let k = 0; 2 * k < NCOL; k++) {
     for (let i = 0; i < n; i++) {
       if (!selected[i]) continue;
-      if (cellIncluded[i][2 * k]) qs.push(rows[i][2 * k]);           // 1,3,5,7,9,11 번째 열 (0-based 0,2,4,...)
-      if (cellIncluded[i][2 * k + 1]) rs.push(rows[i][2 * k + 1]);   // 2,4,6,8,10,12 번째 열
+      if (cellIncluded[i][2 * k]) qs.push(rows[i][2 * k]);                             // 홀수 번째 열 (0-based 0,2,4,...)
+      if (2 * k + 1 < NCOL && cellIncluded[i][2 * k + 1]) rs.push(rows[i][2 * k + 1]);  // 짝수 번째 열
     }
   }
   const cmp = sortDir === 'asc' ? (a, b) => a - b : (a, b) => b - a;
@@ -226,20 +230,21 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
   const sideRows = Math.max(qs.length, rs.length);
   for (let i = 0; i < sideRows; i++) {
     const r = 3 + i;
-    put(r, COL.P, i + 1, 'gray');
-    put(r, COL.Q, i < qs.length ? qs[i] : null, 'data');
-    put(r, COL.R, i < rs.length ? rs[i] : null, 'data');
+    put(r, colP, i + 1, 'gray');
+    put(r, colQ, i < qs.length ? qs[i] : null, 'data');
+    put(r, colR, i < rs.length ? rs[i] : null, 'data');
   }
 
   return {
     cells: cells,
     merges: merges,
-    colWidths: { 16: 5.125 },   // VBA ColumnWidth 4.5 의 엑셀 저장값
+    colWidths: { [colP]: 5.125 },   // VBA ColumnWidth 4.5 의 엑셀 저장값
     rowHeight: 16.5,
     // 전체 선택이면 사이드 표(6n)가 항상 본문(2n)보다 길지만, 일부만 선택하면
     // 사이드 표가 더 짧아질 수 있으므로 둘 중 큰 쪽으로 맞춘다.
     maxRow: 2 + Math.max(2 * n, sideRows),
-    maxCol: COL.R,
+    maxCol: colR,
+    mainMaxCol: colO,   // 미리보기가 본문/사이드 표 두 <table> 을 나누는 경계 — 열 개수에 따라 바뀐다
   };
 }
 
@@ -352,11 +357,11 @@ root.APP = {
 
   // 사이드 표(P/Q/R)는 화면에서만 별도 <table> 로 분리한다 — 마우스 드래그로
   // 사이드 표만 선택할 수 있도록. xlsx 는 buildModel/toXlsx 가 그대로 한 시트에 담으므로
-  // 이 분리는 미리보기 전용이며 내보내기 결과에는 영향이 없다. 어떤 병합도 본문(1~15열)과
-  // 사이드 표(16~18열) 경계를 넘지 않으므로 열 범위로 안전하게 나눌 수 있다.
-  const MAIN_MAX_COL = APP.COL.O;   // 15 — 본문은 A..O
+  // 이 분리는 미리보기 전용이며 내보내기 결과에는 영향이 없다. 어떤 병합도 본문과 사이드
+  // 표 경계(model.mainMaxCol)를 넘지 않으므로 열 범위로 안전하게 나눌 수 있다.
 
   function renderPreview(model, included, cellIncluded, editMode) {
+    const MAIN_MAX_COL = model.mainMaxCol;
     const covered = new Set();
     const span = new Map();
     for (const m of model.merges) {

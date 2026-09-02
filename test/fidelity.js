@@ -60,9 +60,13 @@ async function main() {
   check('BOM 과 CRLF', JSON.stringify(P('﻿' + base + '\r\n').rows) === JSON.stringify(P(base).rows));
   check('빈 줄은 건너뛴다', P(base + '\n\n' + base).rows.length === 2);
 
-  const short = P(base.split(',').slice(0, 11).join(','));
-  check('11열은 실패', !!short.error, JSON.stringify(short));
-  check('11열 오류에 줄 번호', /^1번째/.test(short.error || ''), short.error);
+  const eightCol = '1,2,3,4,5,6,7,8';
+  const okEight = P(eightCol + '\n' + eightCol);
+  check('12열이 아니어도 스스로 일관되면 성공 (열 개수 동적 감지)', !okEight.error && okEight.rows.length === 2, JSON.stringify(okEight));
+
+  const mismatch = P(eightCol + '\n' + '1,2,3,4,5,6,7');
+  check('감지된 열 개수(8)와 다른 줄은 실패', !!mismatch.error && /8열이어야/.test(mismatch.error), mismatch.error);
+  check('열 개수 불일치 오류에 줄 번호', /^2번째/.test(mismatch.error || ''), mismatch.error);
 
   const nan = P('465,x,97,596,776,652,442,626,637,96,744,406');
   check('숫자가 아니면 실패', !!nan.error, JSON.stringify(nan));
@@ -166,6 +170,30 @@ async function main() {
   check('행 높이 16.5', M.rowHeight === 16.5);
   check('maxRow = 2 + 6n = 74', M.maxRow === 74, 'maxRow=' + M.maxRow);
   check('maxCol = 18', M.maxCol === 18);
+  check('mainMaxCol = 15 (O)', M.mainMaxCol === 15, 'mainMaxCol=' + M.mainMaxCol);
+
+  section('열 개수 동적 감지 — 12열이 아닌 파일의 레이아웃');
+  const rows8 = [[1, 2, 3, 4, 5, 6, 7, 8], [11, 12, 13, 14, 15, 16, 17, 18]];
+  const M8 = app.APP.buildModel(rows8, 'T8', 'L8');
+  const at8 = (r, c) => cellAt(M8, r, c);
+  check('mainMaxCol = C(3) + NCOL(8) = 11', M8.mainMaxCol === 11, 'mainMaxCol=' + M8.mainMaxCol);
+  check('maxCol = mainMaxCol + 3 = 14', M8.maxCol === 14, 'maxCol=' + M8.maxCol);
+  check('제목 병합이 A1:11열1 로 줄어든다', hasMerge(M8, 1, 1, 1, 11));
+  check('라벨 병합이 13~14열로 밀린다', hasMerge(M8, 1, 13, 1, 14));
+  check('colWidths 키가 칸막이+1(12) 로 밀린다', M8.colWidths[12] === 5.125 && M8.colWidths[16] === undefined, JSON.stringify(M8.colWidths));
+  check('마지막 데이터 열(10번째) 값', at8(4, 10) && at8(4, 10).v === 8, JSON.stringify(at8(4, 10)));
+  check('칸막이(11열) 는 값 없는 data', at8(4, 11) && at8(4, 11).v === null && at8(4, 11).s === 'data');
+  check('Q(13열) 첫 값 = 홀수 열 중 최대(17)', at8(3, 13) && at8(3, 13).v === 17, JSON.stringify(at8(3, 13)));
+
+  const rows7 = [[10, 20, 30, 40, 50, 60, 70]];   // 홀수 개(7) — 마지막 열은 짝이 없다
+  const M7 = app.APP.buildModel(rows7, 'T7', 'L7');
+  const q7 = [], r7 = [];
+  for (let r = 3; r < 3 + 4; r++) {
+    q7.push(cellAt(M7, r, M7.mainMaxCol + 2).v);
+    r7.push(cellAt(M7, r, M7.mainMaxCol + 3).v);
+  }
+  check('홀수 열 개수(7) — Q는 4개(짝 없는 마지막 열 포함)', JSON.stringify(q7) === JSON.stringify([70, 50, 30, 10]), JSON.stringify(q7));
+  check('홀수 열 개수(7) — R은 3개, 남는 칸은 값 없음', JSON.stringify(r7) === JSON.stringify([60, 40, 20, null]), JSON.stringify(r7));
 
   section('행 선택 필터링과 정렬 방향');
   const sel2 = rows12.map((_, i) => i < 2);   // 앞의 2행만 선택
