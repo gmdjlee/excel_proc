@@ -24,6 +24,7 @@ table.sheet td.editable:hover, table.sheet td.editable:focus { outline: 1px dash
 table.sheet td.editable.bad-input { outline: 2px solid #c00; outline-offset: -2px; }
 table.sheet td.rowsel { border: none; text-align: center; padding: 0 2px; }
 table.sheet td.rowsel input { margin: 0; cursor: pointer; }
+table.sheet td.groupsel input { margin: 0 2px 0 0; cursor: pointer; vertical-align: middle; }
 table.sheet td.toggleable { cursor: pointer; }
 table.sheet td.toggleable:hover { outline: 1px dashed #666; outline-offset: -1px; }
 table.sheet td.excluded { opacity: .35; text-decoration: line-through; }
@@ -169,7 +170,12 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
   if (bText === undefined) bText = 'B';
   const cells = [];
   const merges = [];
-  const put = (r, c, v, s, edit) => cells.push(edit ? { r: r, c: c, v: v, s: s, edit: edit } : { r: r, c: c, v: v, s: s });
+  const put = (r, c, v, s, edit, group) => {
+    const cell = { r: r, c: c, v: v, s: s };
+    if (edit) cell.edit = edit;
+    if (group) cell.group = group;
+    cells.push(cell);
+  };
 
   // 1행: 제목 A1:칸막이1, 라벨 Q1:R1. 병합에 덮인 셀은 넣지 않는다 —
   // toXlsx 가 병합 사각형 전체에 직접 서식을 입히고, 미리보기는 colspan/rowspan 으로 처리한다.
@@ -195,7 +201,8 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
     put(dataRow,   colO, null, 'data');
   }
 
-  // A/B 그룹 라벨 — B는 CSV 2행씩, A는 4행씩 묶어 병합
+  // A/B 그룹 라벨 — B는 CSV 2행씩, A는 4행씩 묶어 병합. rowFrom/rowTo(0-based, 포함)는
+  // 그룹 체크박스가 한번에 선택/해제할 CSV 행 범위 — included 배열의 인덱스와 같다.
   const GROUPS = [{ col: COL.B, size: 2 }, { col: COL.A, size: 4 }];
   for (let gi = 0; gi < GROUPS.length; gi++) {
     const col = GROUPS[gi].col, size = GROUPS[gi].size;
@@ -204,7 +211,7 @@ function buildModel(rows, titleText, labelText, selected, sortDir, aText, bText,
       const last = Math.min((g + 1) * size, n);
       const rFrom = 3 + (first - 1) * 2;
       const rTo   = 3 + (last  - 1) * 2 + 1;
-      put(rFrom, col, g + 1, 'accent2');
+      put(rFrom, col, g + 1, 'accent2', undefined, { rowFrom: first - 1, rowTo: last - 1 });
       merges.push({ r1: rFrom, c1: col, r2: rTo, c2: col });
     }
   }
@@ -400,6 +407,14 @@ root.APP = {
       const cell = byPos.get(key);
       if (!cell) return '<td class="empty"' + attrs + '></td>';
       const text = cell.v === null ? '' : escapeHtml(cell.v);
+
+      if (cell.group) {
+        const allOn = included.slice(cell.group.rowFrom, cell.group.rowTo + 1).every(Boolean);
+        return '<td class="groupsel" style="background:' + APP.STYLES[cell.s].css + '"' + attrs +
+          '><input type="checkbox" data-group-from="' + cell.group.rowFrom + '" data-group-to="' + cell.group.rowTo + '"' +
+          (allOn ? ' checked' : '') + '>' + text + '</td>';
+      }
+
       if (!cell.edit) return '<td style="background:' + APP.STYLES[cell.s].css + '"' + attrs + '>' + text + '</td>';
 
       const excluded = !cellIncluded[cell.edit.row][cell.edit.col];
@@ -573,8 +588,16 @@ root.APP = {
 
   previewEl.addEventListener('change', ev => {
     const cb = ev.target.closest('input[data-row-select]');
-    if (!cb) return;
-    entries[selected].included[Number(cb.dataset.rowSelect)] = cb.checked;
+    if (cb) {
+      entries[selected].included[Number(cb.dataset.rowSelect)] = cb.checked;
+      draw();
+      return;
+    }
+    const gcb = ev.target.closest('input[data-group-from]');
+    if (!gcb) return;
+    const from = Number(gcb.dataset.groupFrom), to = Number(gcb.dataset.groupTo);
+    const included = entries[selected].included;
+    for (let i = from; i <= to; i++) included[i] = gcb.checked;
     draw();
   });
 

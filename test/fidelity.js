@@ -140,6 +140,18 @@ async function main() {
   check('n=5 의 마지막 B 그룹은 B11:B12', hasMerge(M5, 11, 2, 12, 2), JSON.stringify(M5.merges.filter(m => m.c1 === 2)));
   check('n=5 의 마지막 A 그룹은 A11:A12', hasMerge(M5, 11, 1, 12, 1), JSON.stringify(M5.merges.filter(m => m.c1 === 1 && m.r1 !== 1)));
 
+  section('그룹 체크박스 지원 — buildModel 이 A/B 그룹 셀에 행 범위를 표시한다');
+  check('A 그룹1(A3) 행 범위 0~3', at(3, 1) && at(3, 1).group && at(3, 1).group.rowFrom === 0 && at(3, 1).group.rowTo === 3, JSON.stringify(at(3, 1) && at(3, 1).group));
+  check('A 그룹2(A11) 행 범위 4~7', at(11, 1) && at(11, 1).group && at(11, 1).group.rowFrom === 4 && at(11, 1).group.rowTo === 7, JSON.stringify(at(11, 1) && at(11, 1).group));
+  check('B 그룹1(B3) 행 범위 0~1', at(3, 2) && at(3, 2).group && at(3, 2).group.rowFrom === 0 && at(3, 2).group.rowTo === 1, JSON.stringify(at(3, 2) && at(3, 2).group));
+  check('B 그룹6(B23) 행 범위 10~11', at(23, 2) && at(23, 2).group && at(23, 2).group.rowFrom === 10 && at(23, 2).group.rowTo === 11, JSON.stringify(at(23, 2) && at(23, 2).group));
+  check('제목 셀엔 group 태그 없음', at(1, 1) && at(1, 1).group === undefined);
+  check('데이터 셀엔 group 태그 없음', at(4, 3) && at(4, 3).group === undefined);
+
+  const atM5 = (r, c) => cellAt(M5, r, c);
+  check('n=5 마지막 A그룹(A11) 행 범위 4~4 (1개만 남음)', atM5(11, 1) && atM5(11, 1).group.rowFrom === 4 && atM5(11, 1).group.rowTo === 4, JSON.stringify(atM5(11, 1) && atM5(11, 1).group));
+  check('n=5 마지막 B그룹(B11) 행 범위 4~4', atM5(11, 2) && atM5(11, 2).group.rowFrom === 4 && atM5(11, 2).group.rowTo === 4, JSON.stringify(atM5(11, 2) && atM5(11, 2).group));
+
   section('Task 5: 사이드 표와 치수');
   check('P1 = 값 없는 gray', at(1, 16) && at(1, 16).v === null && at(1, 16).s === 'gray', JSON.stringify(at(1, 16)));
   check('P2 = 값 없는 gray', at(2, 16) && at(2, 16).v === null && at(2, 16).s === 'gray');
