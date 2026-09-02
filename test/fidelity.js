@@ -201,6 +201,34 @@ async function main() {
   const Mexplicit = app.APP.buildModel(rows12, '8/28 111G', 'XX', rows12.map(() => true), 'desc');
   check('selected/sortDir 인자를 생략하면 전체선택+내림차순과 동일', JSON.stringify(Mexplicit) === JSON.stringify(M), 'differs');
 
+  section('편집 모드 — 셀 단위 제외');
+  const cellAllOn = rows12.map(row => row.map(() => true));
+  const Mcell0 = app.APP.buildModel(rows12, '8/28 111G', 'XX', undefined, undefined, undefined, undefined, cellAllOn);
+  check('cellIncluded 를 명시적으로 전체 true 로 주면 생략과 동일', JSON.stringify(Mcell0) === JSON.stringify(M), 'differs');
+
+  const cellExcl = rows12.map(row => row.map(() => true));
+  cellExcl[0][0] = false;   // 첫 행 첫 값(홀수 열 1번째, Q 로 감) 만 제외
+  const Mexcl = app.APP.buildModel(rows12, '8/28 111G', 'XX', undefined, undefined, undefined, undefined, cellExcl);
+
+  const qColExcl = [], rColExcl = [];
+  for (let r = 3; r <= 74; r++) {
+    const qc = cellAt(Mexcl, r, 17), rc = cellAt(Mexcl, r, 18);
+    qColExcl.push(qc ? qc.v : undefined);
+    rColExcl.push(rc ? rc.v : undefined);
+  }
+  check('Q 는 제외한 값 하나만큼 71개로 줄고 마지막 칸은 값이 빈다', qColExcl.filter(v => v !== null).length === 71 && qColExcl[71] === null, JSON.stringify(qColExcl[71]));
+  check('R 은 셀 제외의 영향을 받지 않고 72개 그대로', rColExcl.filter(v => v !== null).length === 72 && rColExcl[71] !== null);
+
+  const lastQCell = cellAt(Mexcl, 74, 17);
+  check('짧아진 쪽의 남는 칸도 서식(data)은 유지된다', lastQCell && lastQCell.v === null && lastQCell.s === 'data', JSON.stringify(lastQCell));
+  check('maxRow 은 더 긴 쪽(R, 72개)에 맞춰 74 그대로', Mexcl.maxRow === 74, 'maxRow=' + Mexcl.maxRow);
+
+  const selAllButRow0 = rows12.map((_, i) => i !== 0);
+  const Mrowoff = app.APP.buildModel(rows12, '8/28 111G', 'XX', selAllButRow0, 'desc', undefined, undefined, cellAllOn);
+  const qRowoff = [];
+  for (let r = 3; r <= 74; r++) { const c = cellAt(Mrowoff, r, 17); if (c && c.v !== null) qRowoff.push(c.v); }
+  check('행 체크가 해제되면 셀 포함 플래그가 true 여도 그 행 값은 제외된다', qRowoff.length === 66, 'len=' + qRowoff.length);
+
   section('A/B 헤더 텍스트 커스터마이즈');
   check('aText/bText 생략 시 기본값 A/B', at(2, 3).v === 'A' && at(2, 4).v === 'B' && at(2, 17).v === 'A' && at(2, 18).v === 'B');
   const Mcustom = app.APP.buildModel(rows12, '8/28 111G', 'XX', undefined, undefined, '매수', '매도');
